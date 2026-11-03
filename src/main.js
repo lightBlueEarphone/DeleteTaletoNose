@@ -294,12 +294,12 @@ function renderState(app, state) {
 
       <main class="board">
         <section class="arena">
-          <div class="player-card ${state.activeIndex === 0 ? 'is-active' : ''}">
+          <div class="player-card ${state.activeIndex === 0 ? 'is-active' : ''}" role="group" aria-label="${state.players[0].name}の持ち駒">
             <div class="player-header">
               <span>${state.players[0].name}</span>
-              <span class="badge">${state.players[0].hand.length}枚</span>
+              <span class="badge">${state.players[0].hand.length}枚${state.activeIndex === 0 ? '・手番' : ''}</span>
             </div>
-            <div class="hand">${renderHand(state.players[0].hand)}</div>
+            <div class="hand" role="group" aria-label="持ち駒 ${state.players[0].hand.length}枚">${renderHand(state.players[0].hand)}</div>
           </div>
 
           <div class="status-panel ${state.gameOver ? 'is-game-over' : ''}">
@@ -307,25 +307,25 @@ function renderState(app, state) {
               <span class="lead-label">次の文字</span>
               <strong>${state.currentLead ? state.currentLead : '自由'}</strong>
             </div>
-            <p class="status-text">${state.status}</p>
-            ${state.lastError ? `<p class="status-error">${state.lastError}</p>` : ''}
+            <p class="status-text" role="status" aria-live="polite">${state.status}</p>
+            ${state.lastError ? `<p class="status-error" role="alert">${state.lastError}</p>` : ''}
             ${state.gameOver ? `<p class="winner-box">勝者: ${state.winner}</p>` : ''}
           </div>
 
-          <div class="player-card ${state.activeIndex === 1 ? 'is-active' : ''}">
+          <div class="player-card ${state.activeIndex === 1 ? 'is-active' : ''}" role="group" aria-label="${state.players[1].name}の持ち駒">
             <div class="player-header">
               <span>${state.players[1].name}</span>
-              <span class="badge">${state.players[1].hand.length}枚</span>
+              <span class="badge">${state.players[1].hand.length}枚${state.activeIndex === 1 ? '・手番' : ''}</span>
             </div>
-            <div class="hand">${renderHand(state.players[1].hand)}</div>
+            <div class="hand" role="group" aria-label="持ち駒 ${state.players[1].hand.length}枚">${renderHand(state.players[1].hand)}</div>
           </div>
         </section>
 
         <section class="controls">
           <label for="word-input">単語</label>
           <div class="input-row">
-              <input id="word-input" type="text" value="${state.selectedWord}" placeholder="例: りんご" maxlength="20" ${canHumanAct ? '' : 'disabled'} />
-            <button id="play-button" class="primary" ${canHumanAct ? '' : 'disabled'}>${state.pending ? '確認中…' : '使う'}</button>
+              <input id="word-input" type="text" value="${state.selectedWord}" placeholder="例: りんご" maxlength="20" autocomplete="off" aria-label="単語を入力" ${canHumanAct ? '' : 'disabled'} />
+            <button id="play-button" class="primary" ${canHumanAct ? '' : 'disabled'}>${state.pending ? '確認中…' : '単語を使う'}</button>
             <button id="give-up" class="secondary" ${canHumanAct ? '' : 'disabled'}>ギブアップ</button>
           </div>
 
@@ -351,9 +351,14 @@ function renderState(app, state) {
 
   const input = document.querySelector('#word-input');
   if (input && canHumanAct) {
-    input.focus();
     input.addEventListener('input', event => {
       state.selectedWord = event.target.value;
+    });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        requestMove(state, input.value);
+      }
     });
   }
 
