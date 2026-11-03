@@ -257,7 +257,6 @@ function renderState(app, state) {
     <div class="shell">
       <header class="topbar">
         <div class="brand">
-          <p class="brand-kicker">ひらがなを使ってつなぐ、ことば遊び</p>
           <h1>消去しりとり</h1>
         </div>
         <div class="toolbar">
@@ -282,15 +281,14 @@ function renderState(app, state) {
       ${state.showRules ? `
         <section id="rules-panel" class="rules-panel" aria-labelledby="rules-title">
           <div class="rules-heading">
-            <span class="section-kicker">はじめての方へ</span>
             <h2 id="rules-title">遊び方</h2>
           </div>
           <ol class="rules-list">
-            <li>最初の単語は自由。次からは、ひとつ前の単語の最後の文字で始めます。</li>
-            <li>先頭の文字は使わず、それ以外の文字は自分の持ち駒から使います。使った駒は戻りません。</li>
-            <li>「ん」で終わる単語を言うと負け。持ち駒を先に使い切るか、相手が単語を作れなくなれば勝ちです。</li>
+            <li>最初の単語は自由です。次の単語は、前の単語の最後の文字から始めます。</li>
+            <li>単語の先頭以外の文字は、持ち駒から使います。使った駒は戻りません。</li>
+            <li>「ん」で終わる単語を言うと負けです。持ち駒を先に使い切るか、相手が単語を作れなくなると勝ちです。</li>
           </ol>
-          <p class="rules-note">単語の読みは辞書で確認します。確認にはインターネット接続が必要です。</p>
+          <p class="rules-note">単語の読みを確認するにはインターネット接続が必要です。</p>
         </section>
       ` : ''}
 
