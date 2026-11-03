@@ -32,7 +32,8 @@ const WIKI_APIS = [
 
 function kanaToHiragana(text) {
   return text
-    .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .normalize('NFKC')
+    .replace(/[ァ-ヶヷ-ヺ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
     .replace(/ー/g, '')
     .replace(/\s+/g, '')
     .replace(/[！-／：-＠［-｀｛-～]/g, '')
@@ -44,11 +45,15 @@ function baseKana(ch) {
 }
 
 async function lookupWikiEntry(word) {
+  const hiragana = normalizeWord(word);
+  const katakana = hiragana.replace(/[ぁ-ゖ]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+  const titles = [...new Set([word.trim(), hiragana, katakana])].join('|');
+
   const results = await Promise.all(WIKI_APIS.map(async api => {
     const params = new URLSearchParams({
       action: 'query',
       format: 'json',
-      titles: word,
+      titles,
       redirects: '1',
       prop: 'pageprops|categories',
       ppprop: 'defaultsort|disambiguation',
@@ -65,21 +70,24 @@ async function lookupWikiEntry(word) {
 
       const result = await response.json();
       const pages = Object.values(result.query?.pages || {});
-      const page = pages.find(candidate => !Object.hasOwn(candidate, 'missing'));
-      if (!page) return false;
+      const foundPages = pages.filter(candidate => !Object.hasOwn(candidate, 'missing'));
+      if (!foundPages.length) return false;
 
-      const candidates = [
-        page.pageprops?.defaultsort?.split(/\s+/)[0],
-        ...(page.categories || []).map(category => category.sortkeyprefix),
-        page.title,
-        word,
-      ];
-      const reading = candidates
-        .filter(Boolean)
-        .map(candidate => normalizeWord(candidate))
-        .find(candidate => /^[ぁ-ゖー]+$/.test(candidate));
+      const readablePage = foundPages.map(page => {
+        const candidates = [
+          page.pageprops?.defaultsort?.split(/\s+/)[0],
+          ...(page.categories || []).map(category => category.sortkeyprefix),
+          page.title,
+          hiragana,
+        ];
+        const reading = candidates
+          .filter(Boolean)
+          .map(candidate => normalizeWord(candidate))
+          .find(candidate => /^[ぁ-ゖー]+$/.test(candidate));
+        return reading ? { found: true, reading } : null;
+      }).find(Boolean);
 
-      return { found: true, reading: reading || null };
+      return readablePage || { found: true, reading: null };
     } catch {
       return null;
     } finally {
@@ -241,6 +249,7 @@ function renderHand(hand) {
 function renderState(app, state) {
   const active = getActivePlayer(state);
   const opponent = getOpponentPlayer(state);
+  const canHumanAct = !state.gameOver && !state.pending && active.isHuman;
   const validMoves = state.currentLead ? getValidMoves(state.currentLead, active.hand) : WORDS.filter(word => canUseWord(normalizeWord(word), active.hand, null).valid);
 
   app.innerHTML = `
@@ -291,14 +300,15 @@ function renderState(app, state) {
         <section class="controls">
           <label for="word-input">単語</label>
           <div class="input-row">
-              <input id="word-input" type="text" value="${state.selectedWord}" placeholder="例: りんご" maxlength="20" ${state.gameOver || state.pending ? 'disabled' : ''} />
-            <button id="play-button" class="primary" ${state.gameOver || state.pending ? 'disabled' : ''}>${state.pending ? '確認中…' : '使う'}</button>
+              <input id="word-input" type="text" value="${state.selectedWord}" placeholder="例: りんご" maxlength="20" ${canHumanAct ? '' : 'disabled'} />
+            <button id="play-button" class="primary" ${canHumanAct ? '' : 'disabled'}>${state.pending ? '確認中…' : '使う'}</button>
+            <button id="give-up" class="secondary" ${canHumanAct ? '' : 'disabled'}>ギブアップ</button>
           </div>
 
           <div class="suggestions">
             <p>作れる単語</p>
             <div class="suggestion-list">
-              ${validMoves.slice(0, 8).map(word => `<button type="button" class="suggestion" data-word="${word}" ${state.pending ? 'disabled' : ''}>${word}</button>`).join('') || '<span class="muted">候補なし</span>'}
+              ${validMoves.slice(0, 8).map(word => `<button type="button" class="suggestion" data-word="${word}" ${canHumanAct ? '' : 'disabled'}>${word}</button>`).join('') || '<span class="muted">候補なし</span>'}
             </div>
           </div>
         </section>
@@ -316,7 +326,7 @@ function renderState(app, state) {
   `;
 
   const input = document.querySelector('#word-input');
-    if (input && !state.gameOver && !state.pending) {
+    if (input && canHumanAct) {
     input.focus();
     input.addEventListener('input', event => {
       state.selectedWord = event.target.value;
@@ -326,6 +336,19 @@ function renderState(app, state) {
   document.querySelector('#play-button')?.addEventListener('click', () => {
     const value = input?.value || '';
     requestMove(state, value);
+  });
+
+  document.querySelector('#give-up')?.addEventListener('click', () => {
+    if (state.gameOver || state.pending || !getActivePlayer(state).isHuman) return;
+
+    const player = getActivePlayer(state);
+    const winner = getOpponentPlayer(state);
+    state.gameOver = true;
+    state.winner = winner.name;
+    state.status = `${player.name}がギブアップしました。${winner.name}の勝ちです。`;
+    state.lastError = '';
+    state.selectedWord = '';
+    renderState(app, state);
   });
 
   document.querySelector('#new-game')?.addEventListener('click', () => {

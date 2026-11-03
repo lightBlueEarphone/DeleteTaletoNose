@@ -8,6 +8,7 @@
 - ローカル対戦
 - 先頭の文字は前の単語の末尾を引き継ぐ
 - 「ん」で終わる単語を言うと負け
+- ギブアップすると相手の勝ち
 - 1回使った駒は二度使えない
 - 持ち駒がなくなれば勝利
 - 持ち駒で作れる単語がなくなれば敗北
@@ -22,6 +23,12 @@ npm run dev -- --host 0.0.0.0
 ```
 
 ブラウザで表示されたURLを開いて遊んでください。
+
+## GitHub Pagesで公開
+
+`main` ブランチにpushすると、GitHub ActionsがビルドしてPagesへ公開します。GitHubリポジトリの Settings > Pages で、公開元を「GitHub Actions」に設定してください。
+
+公開URL: https://lightBlueEarphone.github.io/DeleteTaletoNose/
 
 ## ルールメモ
 
