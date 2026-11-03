@@ -33,7 +33,7 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
-        align-items: center;
+        align-items: flex-start;
         gap: 4px;
         padding: 8px 16px;
         border-bottom: 1px solid var(--nav-border);
@@ -53,7 +53,7 @@
 
       .app-nav-links {
         display: flex;
-        justify-content: center;
+        justify-content: flex-start;
         align-items: center;
         gap: 8px;
       }
@@ -64,7 +64,8 @@
         justify-content: center;
         min-height: 32px;
         padding: 6px 12px;
-        border-radius: 999px;
+        border: 1px solid var(--nav-border);
+        border-radius: 6px;
         color: var(--nav-text);
         text-decoration: none;
         font-size: 0.88rem;
@@ -78,6 +79,7 @@
       }
 
       .app-nav a[aria-current='page'] {
+        border-color: rgba(10, 132, 255, 0.22);
         background: var(--nav-pill);
         color: #0a84ff;
         font-weight: 600;
