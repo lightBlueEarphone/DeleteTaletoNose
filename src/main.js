@@ -1,5 +1,5 @@
 const WORDS = [
-  'あいどり','いぬ','うさぎ','えんぴつ','おかず','かえる','がっこう','きりん','くま','ぐりむ','けしごむ','こま','さくら','しろ','すし','せき','そら','たこ','ちょうちょ','つき','てんとう虫','どら焼き','なす','にほん','ぬりえ','ねこ','のこぎり','はやし','ひかり','ふくろう','へび','ほし','まつ','みず','むし','めがね','もも','やぎ','ゆき','よる','らっぱ','りんご','るすばん','れもん','ろうか','わに','ゐんか', 'うんち', 'ちょう','おうち','ちいさな','かなかな','なべ','べんとう','とうもろこし','しっぽ','ぽっぽ','ぴかぴか','かたつむり','むしとり','りす','すいか','かき','きのこ','こおり','りょうり','やさい','いちご','ごりら','らいおん','おに','にんじん','じゅうたん','たんぽぽ','ぽてと','とんぼ','ぼうし','しおかぜ','ぜんぶ','ぶどう','うどん','どんぐり','りゅう','ゆうひ','ひつじ','じてんしゃ','しゃぼん','ん' ]
+  'あいどり','いぬ','うさぎ','えんぴつ','おかず','かえる','がっこう','きりん','くま','ぐりむ','けしごむ','こま','さくら','しろ','すし','せき','そら','たこ','ちょうちょ','つき','てんとう虫','どら焼き','なす','にほん','ぬりえ','ねこ','のこぎり','はやし','ひかり','ふくろう','へび','ほし','まつ','みず','むし','めがね','もも','やぎ','ゆき','よる','らっぱ','りんご','るすばん','れもん','ろうか','わに','ゐんか', 'うんち', 'ちょう','おうち','ちいさな','かなかな','なべ','べんとう','とうもろこし','しっぽ','ぽっぽ','ぴかぴか','かたつむり','むしとり','りす','すいか','かき','きのこ','こおり','りょうり','やさい','いちご','ごりら','らいおん','おに','にんじん','じゅうたん','たんぽぽ','ぽてと','とんぼ','ぼうし','しおかぜ','ぜんぶ','ぶどう','うどん','どんぐり','りゅう','ゆうひ','ひつじ','じてんしゃ','しゃぼん','ん'
 ];
 
 const BASE_HIRAGANA = [
@@ -21,11 +21,18 @@ const BASE_MAP = {
   'だ':'た','ぢ':'ち','づ':'つ','で':'て','ど':'と',
   'ば':'は','び':'ひ','ぶ':'ふ','べ':'へ','ぼ':'ほ',
   'ぱ':'は','ぴ':'ひ','ぷ':'ふ','ぺ':'へ','ぽ':'ほ',
+  'ぁ':'あ','ぃ':'い','ぅ':'う','ぇ':'え','ぉ':'お',
+  'ゃ':'や','ゅ':'ゆ','ょ':'よ','っ':'つ','ゎ':'わ','ゕ':'か','ゖ':'け',
 };
+
+const WIKI_APIS = [
+  'https://ja.wiktionary.org/w/api.php',
+  'https://ja.wikipedia.org/w/api.php',
+];
 
 function kanaToHiragana(text) {
   return text
-    .replace(/[ァ-ヴ]/g, ch => ch.replace(/ァ/g, 'ぁ').replace(/ィ/g, 'ぃ').replace(/ゥ/g, 'ぅ').replace(/ェ/g, 'ぇ').replace(/ォ/g, 'ぉ').replace(/ャ/g, 'ゃ').replace(/ュ/g, 'ゅ').replace(/ョ/g, 'ょ').replace(/ッ/g, 'っ').replace(/ー/g, 'ー'))
+    .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
     .replace(/ー/g, '')
     .replace(/\s+/g, '')
     .replace(/[！-／：-＠［-｀｛-～]/g, '')
@@ -34,6 +41,57 @@ function kanaToHiragana(text) {
 
 function baseKana(ch) {
   return BASE_MAP[ch] || ch;
+}
+
+async function lookupWikiEntry(word) {
+  const results = await Promise.all(WIKI_APIS.map(async api => {
+    const params = new URLSearchParams({
+      action: 'query',
+      format: 'json',
+      titles: word,
+      redirects: '1',
+      prop: 'pageprops|categories',
+      ppprop: 'defaultsort|disambiguation',
+      clprop: 'sortkeyprefix',
+      cllimit: 'max',
+      origin: '*',
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const response = await fetch(`${api}?${params}`, { signal: controller.signal });
+      if (!response.ok) return null;
+
+      const result = await response.json();
+      const pages = Object.values(result.query?.pages || {});
+      const page = pages.find(candidate => !Object.hasOwn(candidate, 'missing'));
+      if (!page) return false;
+
+      const candidates = [
+        page.pageprops?.defaultsort?.split(/\s+/)[0],
+        ...(page.categories || []).map(category => category.sortkeyprefix),
+        page.title,
+        word,
+      ];
+      const reading = candidates
+        .filter(Boolean)
+        .map(candidate => normalizeWord(candidate))
+        .find(candidate => /^[ぁ-ゖー]+$/.test(candidate));
+
+      return { found: true, reading: reading || null };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }));
+
+  const readableEntry = results.find(result => result?.found && result.reading);
+  if (readableEntry) return readableEntry;
+  if (results.some(result => result?.found)) return { found: true, reading: null };
+  if (results.every(result => result === false)) return { found: false, reading: null };
+  throw new Error('辞書に接続できませんでした。');
 }
 
 function normalizeWord(word) {
@@ -103,26 +161,33 @@ function getValidMoves(lead, hand) {
   });
 }
 
-function chooseBestCpuMove(lead, hand) {
-  const validMoves = getValidMoves(lead, hand);
-  if (!validMoves.length) return null;
+function getSafeValidMoves(lead, hand) {
+  return getValidMoves(lead, hand).filter(word => !normalizeWord(word).endsWith('ん'));
+}
 
-  return validMoves
+function chooseBestCpuMove(lead, hand, opponentHand) {
+  const candidates = getSafeValidMoves(lead, hand);
+  if (!candidates.length) return null;
+
+  return candidates
     .map(word => {
       const normalized = normalizeWord(word);
-      const score = normalized.length * 3 + (normalized.endsWith('ん') ? 4 : 0) + (normalized.endsWith('る') ? 2 : 0);
+      const nextHand = removeTilesFromHand(hand, normalized, Boolean(lead));
+      const nextLead = normalized.slice(-1);
+      const opponentMoves = getSafeValidMoves(nextLead, opponentHand).length;
+      const ownMoves = nextHand ? getSafeValidMoves(nextLead, nextHand).length : 0;
+      const score = (nextHand?.length === 0 ? 20000 : 0)
+        + (opponentMoves === 0 ? 10000 : 0)
+        - opponentMoves * 20
+        + Math.min(ownMoves, 10) * 3
+        + normalized.length * 2;
       return { word: normalized, score };
     })
     .sort((a, b) => b.score - a.score)[0].word;
 }
 
 function randomHand() {
-  const selected = new Set();
-  while (selected.size < 8) {
-    const index = Math.floor(Math.random() * BASE_HIRAGANA.length);
-    selected.add(BASE_HIRAGANA[index]);
-  }
-  return Array.from(selected);
+  return [...BASE_HIRAGANA];
 }
 
 function makePlayer(name, isHuman) {
@@ -148,9 +213,10 @@ function stateFactory(mode = 'cpu') {
     activeIndex: 0,
     gameOver: false,
     winner: null,
-    status: '対戦開始！先頭の単語を決めてください。',
+    status: '好きな単語からどうぞ。',
     lastError: '',
     selectedWord: '',
+    pending: false,
   };
 }
 
@@ -180,10 +246,7 @@ function renderState(app, state) {
   app.innerHTML = `
     <div class="shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">消去しりとり</p>
-          <h1>DeleteTaletoNose</h1>
-        </div>
+        <h1>消去しりとり</h1>
         <div class="toolbar">
           <label>
             対戦モード
@@ -192,7 +255,7 @@ function renderState(app, state) {
               <option value="local" ${state.mode === 'local' ? 'selected' : ''}>ローカル対戦</option>
             </select>
           </label>
-          <button id="new-game" class="primary">新規対戦</button>
+          <button id="new-game" class="primary">最初から</button>
         </div>
       </header>
 
@@ -208,8 +271,8 @@ function renderState(app, state) {
 
           <div class="status-panel ${state.gameOver ? 'is-game-over' : ''}">
             <div class="lead-box">
-              <span class="lead-label">現在の引き継ぎ</span>
-              <strong>${state.currentLead ? state.currentLead : '開始時は自由'}</strong>
+              <span class="lead-label">次の文字</span>
+              <strong>${state.currentLead ? state.currentLead : '自由'}</strong>
             </div>
             <p class="status-text">${state.status}</p>
             ${state.lastError ? `<p class="status-error">${state.lastError}</p>` : ''}
@@ -226,16 +289,16 @@ function renderState(app, state) {
         </section>
 
         <section class="controls">
-          <label for="word-input">単語を入力</label>
+          <label for="word-input">単語</label>
           <div class="input-row">
-            <input id="word-input" type="text" value="${state.selectedWord}" placeholder="例: りんご" maxlength="20" ${state.gameOver ? 'disabled' : ''} />
-            <button id="play-button" class="primary" ${state.gameOver ? 'disabled' : ''}>決定</button>
+              <input id="word-input" type="text" value="${state.selectedWord}" placeholder="例: りんご" maxlength="20" ${state.gameOver || state.pending ? 'disabled' : ''} />
+            <button id="play-button" class="primary" ${state.gameOver || state.pending ? 'disabled' : ''}>${state.pending ? '確認中…' : '使う'}</button>
           </div>
 
           <div class="suggestions">
-            <p>候補</p>
+            <p>作れる単語</p>
             <div class="suggestion-list">
-              ${validMoves.slice(0, 8).map(word => `<button type="button" class="suggestion" data-word="${word}">${word}</button>`).join('') || '<span class="muted">候補なし</span>'}
+              ${validMoves.slice(0, 8).map(word => `<button type="button" class="suggestion" data-word="${word}" ${state.pending ? 'disabled' : ''}>${word}</button>`).join('') || '<span class="muted">候補なし</span>'}
             </div>
           </div>
         </section>
@@ -245,7 +308,7 @@ function renderState(app, state) {
           <ol>
             ${state.history.length
               ? state.history.map(item => `<li>${item.player}: ${item.word}</li>`).join('')
-              : '<li>まだ単語がありません。</li>'}
+              : '<li>まだありません</li>'}
           </ol>
         </section>
       </main>
@@ -253,7 +316,7 @@ function renderState(app, state) {
   `;
 
   const input = document.querySelector('#word-input');
-  if (input && !state.gameOver) {
+    if (input && !state.gameOver && !state.pending) {
     input.focus();
     input.addEventListener('input', event => {
       state.selectedWord = event.target.value;
@@ -293,17 +356,46 @@ function renderState(app, state) {
   });
 }
 
-function requestMove(currentState, rawValue) {
-  if (currentState.gameOver) return;
+  async function requestMove(currentState, rawValue) {
+    if (currentState.gameOver || currentState.pending) return;
 
   const player = getActivePlayer(currentState);
-  const normalized = normalizeWord(rawValue);
+  let normalized = normalizeWord(rawValue);
   const lead = currentState.currentLead;
 
   if (!normalized) {
     currentState.lastError = '単語を入力してください。';
     renderState(app, currentState);
     return;
+  }
+
+  if (player.isHuman) {
+    currentState.pending = true;
+    currentState.lastError = '';
+    renderState(app, currentState);
+
+    try {
+      const entry = await lookupWikiEntry(rawValue.trim());
+      if (state !== currentState) return;
+      currentState.pending = false;
+      if (!entry.found) {
+        currentState.lastError = 'WikipediaまたはWiktionaryで見つかりませんでした。';
+        renderState(app, currentState);
+        return;
+      }
+      if (!entry.reading) {
+        currentState.lastError = '辞書項目の読みを確認できませんでした。';
+        renderState(app, currentState);
+        return;
+      }
+      normalized = entry.reading;
+    } catch {
+      if (state !== currentState) return;
+      currentState.pending = false;
+      currentState.lastError = '辞書に接続できませんでした。通信を確認して再度お試しください。';
+      renderState(app, currentState);
+      return;
+    }
   }
 
   const validation = canUseWord(normalized, player.hand, lead);
@@ -326,22 +418,33 @@ function requestMove(currentState, rawValue) {
   currentState.lastError = '';
   currentState.selectedWord = '';
 
+  if (normalized.endsWith('ん')) {
+    const opponent = getOpponentPlayer(currentState);
+    currentState.gameOver = true;
+    currentState.winner = opponent.name;
+    currentState.status = `${player.name}は「ん」で終わる単語を言ったため敗北。${opponent.name}の勝利です。`;
+    renderState(app, currentState);
+    return;
+  }
+
   if (player.hand.length === 0) {
     currentState.gameOver = true;
     currentState.winner = player.name;
-    currentState.status = `${player.name}が全駒を使い切って勝利！`;
+    currentState.status = `${player.name}が駒を使い切りました。`;
     renderState(app, currentState);
     return;
   }
 
   currentState.activeIndex = (currentState.activeIndex + 1) % currentState.players.length;
   const nextPlayer = getActivePlayer(currentState);
-  const nextMoves = getValidMoves(currentState.currentLead, nextPlayer.hand);
+  const nextMoves = nextPlayer.isHuman
+    ? getValidMoves(currentState.currentLead, nextPlayer.hand)
+    : getSafeValidMoves(currentState.currentLead, nextPlayer.hand);
 
   if (!nextMoves.length) {
     currentState.gameOver = true;
     currentState.winner = player.name;
-    currentState.status = `${nextPlayer.name}は残りの駒では単語が作れず敗北。${player.name}の勝利です。`;
+    currentState.status = `${nextPlayer.name}は作れる単語がありません。${player.name}の勝ちです。`;
     renderState(app, currentState);
     return;
   }
@@ -351,11 +454,12 @@ function requestMove(currentState, rawValue) {
 
   if (!nextPlayer.isHuman) {
     setTimeout(() => {
-      const cpuWord = chooseBestCpuMove(currentState.currentLead, nextPlayer.hand);
+      if (state !== currentState || currentState.gameOver) return;
+      const cpuWord = chooseBestCpuMove(currentState.currentLead, nextPlayer.hand, player.hand);
       if (!cpuWord) {
         currentState.gameOver = true;
         currentState.winner = player.name;
-        currentState.status = `${nextPlayer.name}は残りの駒では単語が作れず敗北。${player.name}の勝利です。`;
+        currentState.status = `${nextPlayer.name}は作れる単語がありません。${player.name}の勝ちです。`;
         renderState(app, currentState);
         return;
       }
